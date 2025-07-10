@@ -113,9 +113,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -170,6 +170,10 @@ const handleLogout = async () => {
     router.push('/login')
   }
 }
+
+onMounted(() => {
+  refreshUserInfo()
+})
 </script>
 
 <style scoped>
