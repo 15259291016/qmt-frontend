@@ -80,8 +80,8 @@ export const useAuthStore = defineStore('auth', () => {
   const getProfile = async () => {
     try {
       const response = await authAPI.getProfile()
-      user.value = response.data
-      return response.data
+      user.value = response.data.data
+      return response.data.data
     } catch (error: any) {
       // 如果是401错误，说明token无效，自动登出
       if (error.response?.status === 401 || error.message?.includes('令牌无效')) {
