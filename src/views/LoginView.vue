@@ -10,6 +10,7 @@
             type="text" 
             required 
             placeholder="请输入用户名或邮箱"
+            :disabled="authStore.loading"
           >
         </div>
         <div class="form-group">
@@ -19,6 +20,7 @@
             type="password" 
             required 
             placeholder="请输入密码"
+            :disabled="authStore.loading"
           >
         </div>
         <button type="submit" :disabled="authStore.loading">
@@ -47,10 +49,31 @@ const form = reactive({
 
 const handleLogin = async () => {
   try {
+    // 登录
     await authStore.login(form)
+    
+    // 登录成功后初始化用户信息
+    await authStore.initUser()
+    
+    // 跳转到首页
     router.push('/')
   } catch (error: any) {
-    alert(error.message || '登录失败')
+    // 更友好的错误提示
+    let errorMessage = '登录失败'
+    
+    if (error.message) {
+      if (error.message.includes('用户名或密码错误')) {
+        errorMessage = '用户名或密码错误，请检查后重试'
+      } else if (error.message.includes('登录已失效')) {
+        errorMessage = '登录已失效，请重新登录'
+      } else if (error.message.includes('网络')) {
+        errorMessage = '网络连接失败，请检查网络后重试'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
+    alert(errorMessage)
   }
 }
 </script>
@@ -104,6 +127,11 @@ const handleLogin = async () => {
   outline: none;
   border-color: #007bff;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-group input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
 }
 
 button {

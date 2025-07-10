@@ -34,12 +34,15 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authAPI.login(credentials)
       const { access_token, refresh_token, user: userData } = response.data
       
-      // 保存token
+      // 保存token到localStorage
       localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, access_token)
       localStorage.setItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY, refresh_token)
       
-      // 保存用户信息
+      // 保存用户信息到store
       user.value = userData
+      
+      // 确保token已写入，等待一下再返回
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       return response
     } catch (error) {
@@ -82,7 +85,13 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authAPI.getProfile()
       user.value = response.data
       return response.data
-    } catch (error) {
+    } catch (error: any) {
+      // 如果是401错误，说明token无效，自动登出
+      if (error.response?.status === 401 || error.message?.includes('令牌无效')) {
+        console.warn('Token无效，自动登出')
+        await logout()
+        throw new Error('登录已失效，请重新登录')
+      }
       throw error
     }
   }
@@ -93,7 +102,9 @@ export const useAuthStore = defineStore('auth', () => {
       permissions.value = response.data
       return response.data
     } catch (error) {
-      throw error
+      console.warn('获取用户权限失败:', error)
+      // 权限获取失败不影响登录流程
+      return []
     }
   }
 
@@ -103,7 +114,9 @@ export const useAuthStore = defineStore('auth', () => {
       roles.value = response.data
       return response.data
     } catch (error) {
-      throw error
+      console.warn('获取用户角色失败:', error)
+      // 角色获取失败不影响登录流程
+      return []
     }
   }
 
@@ -139,20 +152,30 @@ export const useAuthStore = defineStore('auth', () => {
   // 初始化用户信息
   const initUser = async () => {
     const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY)
-    if (token && !user.value) {
-      try {
-        await getProfile()
-        const currentUser = user.value
-        if (currentUser?.id) {
-          await getUserPermissions(currentUser.id)
-          await getUserRoles(currentUser.id)
-        }
-      } catch (error) {
-        console.error('初始化用户信息失败:', error)
-        // 清除无效token
-        localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY)
-        localStorage.removeItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY)
+    if (!token) {
+      throw new Error('未找到登录令牌')
+    }
+
+    try {
+      // 先获取用户基本信息
+      await getProfile()
+      
+      // 如果获取用户信息成功，再获取权限和角色（可选）
+      const currentUser = user.value
+      if (currentUser?.id) {
+        // 并行获取权限和角色，不阻塞登录流程
+        Promise.all([
+          getUserPermissions(currentUser.id),
+          getUserRoles(currentUser.id)
+        ]).catch(error => {
+          console.warn('获取用户权限或角色失败:', error)
+        })
       }
+    } catch (error: any) {
+      console.error('初始化用户信息失败:', error)
+      // 清除无效token
+      await logout()
+      throw error
     }
   }
 

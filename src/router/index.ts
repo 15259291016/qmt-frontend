@@ -87,12 +87,12 @@ router.beforeEach(async (to, from, next) => {
       }
     }
     
-    // 检查订阅状态
-    if (!authStore.isSubscriptionValid) {
-      // 订阅已过期，跳转到订阅页面
-      next('/subscribe')
-      return
-    }
+    // 检查订阅状态（暂时注释掉，避免阻止登录后的跳转）
+    // if (!authStore.isSubscriptionValid) {
+    //   // 订阅已过期，跳转到订阅页面
+    //   next('/subscribe')
+    //   return
+    // }
     
     // 检查管理员权限
     if (to.meta.requiresAdmin && !authStore.hasRole('admin')) {
