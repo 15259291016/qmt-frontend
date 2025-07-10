@@ -1,0 +1,24 @@
+# Node
+node_modules/
+
+# Env
+.env*
+
+# Log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+/dist/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Test
+coverage/
+
+# Others
+test-integration.html
