@@ -32,18 +32,15 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const response = await authAPI.login(credentials)
-      const { access_token, refresh_token, user: userData } = response.data
-      
+      // 修正：兼容后端返回格式
+      const { access_token, refresh_token, user: userData } = response.data.data
       // 保存token到localStorage
       localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, access_token)
       localStorage.setItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY, refresh_token)
-      
       // 保存用户信息到store
       user.value = userData
-      
       // 确保token已写入，等待一下再返回
       await new Promise(resolve => setTimeout(resolve, 100))
-      
       return response
     } catch (error) {
       throw error
