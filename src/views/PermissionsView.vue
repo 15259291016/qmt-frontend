@@ -7,12 +7,15 @@
     <main class="main">
       <div class="tabs">
         <button :class="{active: tab==='my'}" @click="tab='my'">我的权限</button>
+        <button :class="{active: tab==='user'}" @click="tab='user'">用户管理</button>
         <button :class="{active: tab==='role'}" @click="tab='role'">角色管理</button>
         <button :class="{active: tab==='perm'}" @click="tab='perm'">权限管理</button>
         <button :class="{active: tab==='assign'}" @click="tab='assign'">用户角色分配</button>
+        <button :class="{active: tab==='check'}" @click="tab='check'">权限检查</button>
       </div>
+      
+      <!-- 我的权限Tab -->
       <div v-if="tab==='my'">
-        <!-- 我的权限/角色（原有内容） -->
         <div class="permissions-card">
           <h2>我的权限</h2>
           <div v-if="authStore.permissions.length > 0" class="permissions-list">
@@ -34,8 +37,91 @@
           <p v-else>暂无角色</p>
         </div>
       </div>
+
+      <!-- 用户管理Tab -->
+      <div v-else-if="tab==='user'">
+        <div class="user-card">
+          <h2>用户管理</h2>
+          <div class="user-actions" v-if="isAdmin">
+            <button @click="openUserForm()">新增用户</button>
+          </div>
+          <div class="user-search">
+            <input v-model="userSearch" placeholder="搜索用户名/邮箱" @keyup.enter="fetchUsers(1)" />
+            <button @click="fetchUsers(1)">搜索</button>
+          </div>
+          <table class="user-table">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>全名</th>
+                <th>状态</th>
+                <th>注册时间</th>
+                <th>最后登录</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in users" :key="user.id">
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.full_name || '-' }}</td>
+                <td>{{ user.status || 'active' }}</td>
+                <td>{{ formatDate(user.created_at) }}</td>
+                <td>{{ formatDate(user.last_login) }}</td>
+                <td>
+                  <button v-if="isAdmin" @click="editUser(user)">编辑</button>
+                  <button v-if="isAdmin" @click="selectUser(user)">分配角色</button>
+                  <button v-if="isAdmin && user.username !== authStore.user?.username" @click="deleteUser(user)" style="background-color: #dc3545;">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <button :disabled="userPage===1" @click="userPage--">上一页</button>
+            <span>第{{userPage}}页/共{{userTotalPages}}页</span>
+            <button :disabled="userPage===userTotalPages" @click="userPage++">下一页</button>
+          </div>
+        </div>
+        <!-- 用户表单弹窗 -->
+        <div v-if="showUserForm" class="modal-mask">
+          <div class="modal-container">
+            <h3>{{ editingUser ? '编辑用户' : '新增用户' }}</h3>
+            <form @submit.prevent="submitUserForm">
+              <div class="form-group">
+                <label>用户名</label>
+                <input v-model="userForm.username" required :disabled="editingUser" />
+              </div>
+              <div class="form-group">
+                <label>邮箱</label>
+                <input v-model="userForm.email" type="email" required />
+              </div>
+              <div class="form-group">
+                <label>全名</label>
+                <input v-model="userForm.full_name" />
+              </div>
+              <div class="form-group" v-if="!editingUser">
+                <label>密码</label>
+                <input v-model="userForm.password" type="password" required />
+              </div>
+              <div class="form-group">
+                <label>状态</label>
+                <select v-model="userForm.status">
+                  <option value="active">激活</option>
+                  <option value="inactive">未激活</option>
+                </select>
+              </div>
+              <div class="form-actions">
+                <button type="submit">保存</button>
+                <button type="button" @click="closeUserForm">取消</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- 角色管理Tab -->
       <div v-else-if="tab==='role'">
-        <!-- 角色管理Tab -->
         <div class="roles-card">
           <h2>角色管理</h2>
           <div class="role-actions" v-if="isAdmin">
@@ -47,6 +133,7 @@
                 <th>角色名</th>
                 <th>描述</th>
                 <th>权限</th>
+                <th>系统角色</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -59,6 +146,7 @@
                     {{ getPermissionName(pid) }}
                   </span>
                 </td>
+                <td>{{ role.is_system ? '是' : '否' }}</td>
                 <td>
                   <button v-if="isAdmin" @click="openRoleForm(role)">编辑</button>
                   <button v-if="isAdmin && !role.is_system" @click="deleteRole(role)">删除</button>
@@ -102,8 +190,9 @@
           </div>
         </div>
       </div>
+
+      <!-- 权限管理Tab -->
       <div v-else-if="tab==='perm'">
-        <!-- 权限管理Tab -->
         <div class="permissions-card">
           <h2>权限管理</h2>
           <div class="perm-actions" v-if="isAdmin">
@@ -166,8 +255,9 @@
           </div>
         </div>
       </div>
+
+      <!-- 用户角色分配Tab -->
       <div v-else-if="tab==='assign'">
-        <!-- 用户角色分配Tab -->
         <div class="assign-card">
           <h2>用户角色分配</h2>
           <div class="user-search">
@@ -236,6 +326,54 @@
           </div>
         </div>
       </div>
+      
+      <!-- 权限检查Tab -->
+      <div v-else-if="tab==='check'">
+        <div class="check-card">
+          <h2>权限检查</h2>
+          <div class="check-form">
+            <div class="form-group">
+              <label>选择用户</label>
+              <select v-model="checkUserId" @change="loadUserPermissions">
+                <option value="">请选择用户</option>
+                <option v-for="user in users" :key="user.id" :value="user.id">
+                  {{ user.username }} ({{ user.email }})
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>检查权限</label>
+              <select v-model="checkPermissionId">
+                <option value="">请选择权限</option>
+                <option v-for="perm in allPermissions" :key="perm.id" :value="perm.id">
+                  {{ perm.name }} ({{ perm.resource }}:{{ perm.action }})
+                </option>
+              </select>
+            </div>
+            <button @click="checkUserPermission" :disabled="!checkUserId || !checkPermissionId">检查权限</button>
+          </div>
+          
+          <div v-if="checkResult" class="check-result">
+            <h3>检查结果</h3>
+            <div :class="['result-item', checkResult.hasPermission ? 'success' : 'error']">
+              <strong>权限状态：</strong>
+              <span>{{ checkResult.hasPermission ? '有权限' : '无权限' }}</span>
+            </div>
+            <div v-if="checkResult.roles && checkResult.roles.length > 0" class="result-item">
+              <strong>用户角色：</strong>
+              <span v-for="role in checkResult.roles" :key="role.id" class="perm-tag">
+                {{ role.name }}
+              </span>
+            </div>
+            <div v-if="checkResult.permissions && checkResult.permissions.length > 0" class="result-item">
+              <strong>用户权限：</strong>
+              <span v-for="perm in checkResult.permissions" :key="perm.id" class="perm-tag">
+                {{ perm.name }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -248,10 +386,12 @@ import { useAuthStore } from '@/stores/auth'
 import { computed, onMounted, ref, watch } from 'vue'
 
 const authStore = useAuthStore()
-const tab = ref<'my'|'role'|'perm'|'assign'>('my')
+const tab = ref<'my'|'user'|'role'|'perm'|'assign'|'check'>('my')
+
+// 管理员权限检查
+const isAdmin = computed(() => authStore.hasRole && authStore.hasRole('admin'))
 
 // 角色管理相关
-const isAdmin = computed(() => authStore.hasRole && authStore.hasRole('admin'))
 const roles = ref<any[]>([])
 const page = ref(1)
 const limit = ref(10)
@@ -263,11 +403,54 @@ const showRoleForm = ref(false)
 const editingRole = ref<any|null>(null)
 const roleForm = ref({ name: '', description: '', permissions: [], is_system: false })
 
+// 权限管理相关
+const permissions = ref<any[]>([])
+const permPage = ref(1)
+const permLimit = ref(10)
+const permTotalPages = ref(1)
+const permTotal = ref(0)
+const showPermForm = ref(false)
+const permForm = ref({ name: '', resource: '', action: '', description: '' })
+
+// 用户管理相关
+const users = ref<any[]>([])
+const userPage = ref(1)
+const userLimit = ref(10)
+const userTotalPages = ref(1)
+const userTotal = ref(0)
+const userSearch = ref('')
+const showUserForm = ref(false)
+const editingUser = ref<any|null>(null)
+const userForm = ref({ username: '', email: '', full_name: '', password: '', status: 'active' })
+
+// 用户角色分配相关
+const selectedUser = ref<any|null>(null)
+const showAssignModal = ref(false)
+const assignRoles = ref<string[]>([])
+const userRoles = ref<any[]>([])
+
+// 权限检查相关
+const checkUserId = ref('')
+const checkPermissionId = ref('')
+const checkResult = ref<any|null>(null)
+
+// 格式化日期
+const formatDate = (dateString?: string) => {
+  if (!dateString) return '未设置'
+  try {
+    return new Date(dateString).toLocaleString('zh-CN')
+  } catch {
+    return '无效日期'
+  }
+}
+
+// 获取权限名称
 function getPermissionName(pid: string) {
   const perm = allPermissions.value.find(p => p.id === pid)
   return perm ? perm.name : pid
 }
 
+// 角色管理功能
 function openRoleForm(role?: any) {
   if (role) {
     editingRole.value = role
@@ -278,188 +461,355 @@ function openRoleForm(role?: any) {
   }
   showRoleForm.value = true
 }
+
 function closeRoleForm() {
   showRoleForm.value = false
 }
 
 async function fetchRoles() {
-  const res = await roleAPI.list({ page: page.value, limit: limit.value })
-  if (res.data && res.data.data && res.data.data.roles) {
-    roles.value = res.data.data.roles
-    total.value = res.data.data.pagination.total
-    totalPages.value = res.data.data.pagination.pages
+  try {
+    const res = await roleAPI.list({ page: page.value, limit: limit.value })
+    if (res.data && res.data.data && res.data.data.roles) {
+      roles.value = res.data.data.roles
+      total.value = res.data.data.pagination.total
+      totalPages.value = res.data.data.pagination.pages
+    }
+  } catch (error) {
+    console.error('获取角色列表失败:', error)
   }
 }
 
 async function fetchAllPermissions() {
-  const res = await permissionAPI.list({ page: 1, limit: 1000 })
-  if (res.data && res.data.data && res.data.data.permissions) {
-    allPermissions.value = res.data.data.permissions
+  try {
+    const res = await permissionAPI.list({ page: 1, limit: 1000 })
+    if (res.data && res.data.data && res.data.data.permissions) {
+      allPermissions.value = res.data.data.permissions
+    }
+  } catch (error) {
+    console.error('获取权限列表失败:', error)
   }
 }
 
 async function submitRoleForm() {
-  if (editingRole.value) {
-    // 编辑
-    await roleAPI.update(editingRole.value.id, {
-      name: roleForm.value.name,
-      description: roleForm.value.description,
-      permissions: roleForm.value.permissions
-    })
-  } else {
-    // 新增
-    await roleAPI.create({
-      name: roleForm.value.name,
-      description: roleForm.value.description,
-      permissions: roleForm.value.permissions
-    })
+  try {
+    if (editingRole.value) {
+      await roleAPI.update(editingRole.value.id, {
+        name: roleForm.value.name,
+        description: roleForm.value.description,
+        permissions: roleForm.value.permissions
+      })
+    } else {
+      await roleAPI.create({
+        name: roleForm.value.name,
+        description: roleForm.value.description,
+        permissions: roleForm.value.permissions
+      })
+    }
+    showRoleForm.value = false
+    await fetchRoles()
+    alert('操作成功')
+  } catch (error: any) {
+    alert('操作失败：' + (error.message || '未知错误'))
   }
-  showRoleForm.value = false
-  await fetchRoles()
 }
 
 async function deleteRole(role: any) {
   if (confirm('确定要删除该角色吗？')) {
-    await roleAPI.remove(role.id)
-    await fetchRoles()
+    try {
+      await roleAPI.remove(role.id)
+      await fetchRoles()
+      alert('删除成功')
+    } catch (error: any) {
+      alert('删除失败：' + (error.message || '未知错误'))
+    }
   }
 }
 
-// 权限管理相关
-const permissions = ref<any[]>([])
-const permPage = ref(1)
-const permLimit = ref(10)
-const permTotalPages = ref(1)
-const permTotal = ref(0)
-const showPermForm = ref(false)
-const permForm = ref({ name: '', resource: '', action: '', description: '' })
-
-async function fetchPermissions() {
-  const res = await permissionAPI.list({ page: permPage.value, limit: permLimit.value })
-  if (res.data && res.data.data && res.data.data.permissions) {
-    permissions.value = res.data.data.permissions
-    permTotal.value = res.data.data.pagination.total
-    permTotalPages.value = res.data.data.pagination.pages
-  }
-}
+// 权限管理功能
 function openPermForm() {
   permForm.value = { name: '', resource: '', action: '', description: '' }
   showPermForm.value = true
 }
+
 function closePermForm() {
   showPermForm.value = false
 }
-async function submitPermForm() {
-  await permissionAPI.create({
-    name: permForm.value.name,
-    resource: permForm.value.resource,
-    action: permForm.value.action,
-    description: permForm.value.description
-  })
-  showPermForm.value = false
-  await fetchPermissions()
-  await fetchAllPermissions() // 角色管理Tab权限同步
-}
-async function deletePerm(perm: any) {
-  if (confirm('确定要删除该权限吗？')) {
-    // 后端未实现权限删除API，实际可补充
-    // await permissionAPI.remove(perm.id)
-    alert('请在后端实现权限删除API后再使用此功能')
-    // await fetchPermissions()
-    // await fetchAllPermissions()
+
+async function fetchPermissions() {
+  try {
+    const res = await permissionAPI.list({ page: permPage.value, limit: permLimit.value })
+    if (res.data && res.data.data && res.data.data.permissions) {
+      permissions.value = res.data.data.permissions
+      permTotal.value = res.data.data.pagination.total
+      permTotalPages.value = res.data.data.pagination.pages
+    }
+  } catch (error) {
+    console.error('获取权限列表失败:', error)
   }
 }
 
-// 用户角色分配相关
-const users = ref<any[]>([])
-const userPage = ref(1)
-const userLimit = ref(10)
-const userTotalPages = ref(1)
-const userTotal = ref(0)
-const userSearch = ref('')
-const selectedUser = ref<any|null>(null)
-const showAssignModal = ref(false)
-const assignRoles = ref<string[]>([])
-const userRoles = ref<any[]>([])
+async function submitPermForm() {
+  try {
+    await permissionAPI.create({
+      name: permForm.value.name,
+      resource: permForm.value.resource,
+      action: permForm.value.action,
+      description: permForm.value.description
+    })
+    showPermForm.value = false
+    await fetchPermissions()
+    await fetchAllPermissions()
+    alert('创建成功')
+  } catch (error: any) {
+    alert('创建失败：' + (error.message || '未知错误'))
+  }
+}
+
+async function deletePerm(perm: any) {
+  if (confirm(`确定要删除权限 "${perm.name}" 吗？`)) {
+    try {
+      await permissionAPI.remove(perm.id)
+      await fetchPermissions()
+      await fetchAllPermissions()
+      alert('删除成功')
+    } catch (error: any) {
+      alert('删除失败：' + (error.message || '未知错误'))
+    }
+  }
+}
+
+// 用户管理功能
+function openUserForm(user?: any) {
+  if (user) {
+    editingUser.value = user
+    userForm.value = { 
+      username: user.username, 
+      email: user.email, 
+      full_name: user.full_name || '', 
+      password: '', 
+      status: user.status || 'active' 
+    }
+  } else {
+    editingUser.value = null
+    userForm.value = { username: '', email: '', full_name: '', password: '', status: 'active' }
+  }
+  showUserForm.value = true
+}
+
+function closeUserForm() {
+  showUserForm.value = false
+}
 
 async function fetchUsers(pageNum = 1) {
-  userPage.value = pageNum
-  const params: any = { page: userPage.value, limit: userLimit.value }
-  if (userSearch.value) params.search = userSearch.value
-  const res = await userAPI.list(params)
-  if (res.data && Array.isArray(res.data.data)) {
-    users.value = res.data.data
-    userTotal.value = res.data.data.length // 如后端有分页total可替换
-    userTotalPages.value = 1 // 如后端有分页pages可替换
+  try {
+    userPage.value = pageNum
+    const params: any = { page: userPage.value, limit: userLimit.value }
+    if (userSearch.value) params.search = userSearch.value
+    const res = await userAPI.list(params)
+    if (res.data && Array.isArray(res.data.data)) {
+      users.value = res.data.data
+      userTotal.value = res.data.data.length
+      userTotalPages.value = 1
+    }
+  } catch (error) {
+    console.error('获取用户列表失败:', error)
   }
 }
+
+async function submitUserForm() {
+  try {
+    if (editingUser.value) {
+      // 编辑用户
+      const updateData: any = {
+        email: userForm.value.email,
+        full_name: userForm.value.full_name,
+        status: userForm.value.status
+      }
+      await userAPI.update(editingUser.value.id, updateData)
+    } else {
+      // 创建用户
+      await userAPI.create({
+        username: userForm.value.username,
+        email: userForm.value.email,
+        full_name: userForm.value.full_name,
+        password: userForm.value.password,
+        status: userForm.value.status
+      })
+    }
+    showUserForm.value = false
+    await fetchUsers()
+    alert('操作成功')
+  } catch (error: any) {
+    alert('操作失败：' + (error.message || '未知错误'))
+  }
+}
+
+function editUser(user: any) {
+  openUserForm(user)
+}
+
+async function deleteUser(user: any) {
+  if (confirm(`确定要删除用户 "${user.username}" 吗？此操作不可恢复。`)) {
+    try {
+      await userAPI.remove(user.id)
+      await fetchUsers()
+      alert('删除成功')
+    } catch (error: any) {
+      alert('删除失败：' + (error.message || '未知错误'))
+    }
+  }
+}
+
+// 用户角色分配功能
 function selectUser(user: any) {
   selectedUser.value = user
   fetchUserRoles(user.id)
   showAssignModal.value = true
 }
+
 function closeAssignModal() {
   showAssignModal.value = false
   selectedUser.value = null
   assignRoles.value = []
   userRoles.value = []
 }
+
 async function fetchUserRoles(userId: string) {
-  const res = await userAPI.getUserRoles(userId)
-  if (res.data && res.data.data && res.data.data.roles) {
-    userRoles.value = res.data.data.roles
-    assignRoles.value = userRoles.value.map((r: any) => r.id)
+  try {
+    const res = await userAPI.getUserRoles(userId)
+    if (res.data && res.data.data && res.data.data.roles) {
+      userRoles.value = res.data.data.roles
+      assignRoles.value = userRoles.value.map((r: any) => r.id)
+    }
+  } catch (error) {
+    console.error('获取用户角色失败:', error)
   }
 }
+
 async function submitAssignRoles() {
   if (!selectedUser.value) return
-  // 先移除所有，再分配选中的（可优化为diff）
-  for (const role of userRoles.value) {
-    if (!assignRoles.value.includes(role.id)) {
-      await userAPI.removeRole(selectedUser.value.id, role.id)
+  try {
+    // 先移除所有，再分配选中的
+    for (const role of userRoles.value) {
+      if (!assignRoles.value.includes(role.id)) {
+        await userAPI.removeRole(selectedUser.value.id, role.id)
+      }
     }
-  }
-  for (const roleId of assignRoles.value) {
-    if (!userRoles.value.some((r: any) => r.id === roleId)) {
-      await userAPI.assignRole(selectedUser.value.id, roleId)
+    for (const roleId of assignRoles.value) {
+      if (!userRoles.value.some((r: any) => r.id === roleId)) {
+        await userAPI.assignRole(selectedUser.value.id, roleId)
+      }
     }
+    await fetchUserRoles(selectedUser.value.id)
+    alert('分配成功')
+  } catch (error: any) {
+    alert('分配失败：' + (error.message || '未知错误'))
   }
-  await fetchUserRoles(selectedUser.value.id)
-  alert('分配成功')
 }
+
 async function removeUserRole(role: any) {
   if (!selectedUser.value) return
   if (confirm('确定要移除该角色吗？')) {
-    await userAPI.removeRole(selectedUser.value.id, role.id)
-    await fetchUserRoles(selectedUser.value.id)
+    try {
+      await userAPI.removeRole(selectedUser.value.id, role.id)
+      await fetchUserRoles(selectedUser.value.id)
+      alert('移除成功')
+    } catch (error: any) {
+      alert('移除失败：' + (error.message || '未知错误'))
+    }
   }
 }
 
-onMounted(() => {
-  fetchRoles()
-  fetchAllPermissions()
-  fetchPermissions() // 权限管理Tab初始化
-  fetchUsers() // 用户角色分配Tab初始化
+// 权限检查功能
+async function loadUserPermissions() {
+  if (!checkUserId.value) {
+    checkResult.value = null
+    return
+  }
+  
+  try {
+    const [rolesRes, permissionsRes] = await Promise.all([
+      userAPI.getUserRoles(checkUserId.value),
+      userAPI.getUserPermissions(checkUserId.value)
+    ])
+    
+    checkResult.value = {
+      roles: rolesRes.data?.data?.roles || [],
+      permissions: permissionsRes.data?.data?.permissions || []
+    }
+  } catch (error) {
+    console.error('获取用户权限信息失败:', error)
+    checkResult.value = null
+  }
+}
+
+async function checkUserPermission() {
+  if (!checkUserId.value || !checkPermissionId.value) return
+  
+  try {
+    // 这里需要后端提供权限检查API
+    // 暂时使用前端检查逻辑
+    const userPermissions = checkResult.value?.permissions || []
+    const hasPermission = userPermissions.some((p: any) => p.id === checkPermissionId.value)
+    
+    checkResult.value = {
+      ...checkResult.value,
+      hasPermission
+    }
+  } catch (error) {
+    console.error('权限检查失败:', error)
+    alert('权限检查失败：' + (error as any).message || '未知错误')
+  }
+}
+
+// 监听Tab切换，加载对应数据
+watch(tab, (newTab) => {
+  if (newTab === 'role') {
+    fetchRoles()
+    fetchAllPermissions()
+  } else if (newTab === 'perm') {
+    fetchPermissions()
+  } else if (newTab === 'user' || newTab === 'assign' || newTab === 'check') {
+    fetchUsers()
+  }
+  if (newTab === 'check') {
+    fetchAllPermissions()
+  }
 })
 
+onMounted(() => {
+  // 初始化加载数据
+  if (tab.value === 'role') {
+    fetchRoles()
+    fetchAllPermissions()
+  } else if (tab.value === 'perm') {
+    fetchPermissions()
+  } else if (tab.value === 'user' || tab.value === 'assign') {
+    fetchUsers()
+  }
+})
+
+// 监听分页变化
 watch([page], () => {
-  fetchRoles()
+  if (tab.value === 'role') fetchRoles()
 })
 
 watch([permPage], () => {
-  fetchPermissions()
+  if (tab.value === 'perm') fetchPermissions()
 })
 
 watch([userPage], () => {
-  fetchUsers(userPage.value)
+  if (tab.value === 'user' || tab.value === 'assign') fetchUsers(userPage.value)
 })
 </script>
 
 <style scoped>
+/* 原有样式保持不变 */
 .permissions-container {
   min-height: 100vh;
   background-color: #f8f9fa;
 }
+
 .header {
   background-color: #343a40;
   color: white;
@@ -469,10 +819,12 @@ watch([userPage], () => {
   align-items: center;
   flex-wrap: wrap;
 }
+
 .header h1 {
   margin: 0;
   font-size: 1.5rem;
 }
+
 .back-btn {
   color: white;
   text-decoration: none;
@@ -481,19 +833,24 @@ watch([userPage], () => {
   background-color: #6c757d;
   transition: background-color 0.3s;
 }
+
 .back-btn:hover {
   background-color: #5a6268;
 }
+
 .main {
   padding: 2rem;
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
 }
+
 .tabs {
   display: flex;
   gap: 1rem;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
 }
+
 .tabs button {
   padding: 0.5rem 1.5rem;
   border: none;
@@ -504,27 +861,35 @@ watch([userPage], () => {
   cursor: pointer;
   transition: background 0.2s;
 }
+
 .tabs button.active {
   background: #007bff;
   color: white;
 }
+
 .permissions-card,
 .roles-card,
-.assign-card {
+.assign-card,
+.user-card,
+.check-card {
   background-color: white;
   padding: 2rem;
   border-radius: 8px;
   margin-bottom: 2rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
 .permissions-card h2,
 .roles-card h2,
-.assign-card h2 {
+.assign-card h2,
+.user-card h2,
+.check-card h2 {
   color: #333;
   border-bottom: 2px solid #007bff;
   padding-bottom: 0.5rem;
   margin-bottom: 1rem;
 }
+
 .permission-item,
 .role-item {
   display: flex;
@@ -536,24 +901,47 @@ watch([userPage], () => {
   margin-bottom: 0.5rem;
   background-color: #f8f9fa;
 }
+
 .permission-item strong,
 .role-item strong {
   color: #007bff;
   font-weight: bold;
 }
-.role-actions {
+
+.role-actions,
+.perm-actions,
+.user-actions {
   margin-bottom: 1rem;
 }
-.role-table {
+
+.role-actions button,
+.perm-actions button,
+.user-actions button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
+.role-table,
+.perm-table,
+.user-table {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 1rem;
 }
-.role-table th, .role-table td {
+
+.role-table th, .role-table td,
+.perm-table th, .perm-table td,
+.user-table th, .user-table td {
   border: 1px solid #eee;
   padding: 0.5rem 1rem;
   text-align: left;
 }
+
 .perm-tag {
   display: inline-block;
   background: #e9ecef;
@@ -563,6 +951,7 @@ watch([userPage], () => {
   margin: 0 2px;
   font-size: 0.85em;
 }
+
 .modal-mask {
   position: fixed;
   z-index: 9999;
@@ -572,82 +961,116 @@ watch([userPage], () => {
   align-items: center;
   justify-content: center;
 }
+
 .modal-container {
   background: white;
   border-radius: 8px;
   padding: 2rem;
-  min-width: 320px;
+  min-width: 400px;
   max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
 }
+
 .form-group {
   margin-bottom: 1rem;
 }
+
 .form-group label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
 }
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group input[type="email"] {
+
+.form-group input,
+.form-group select {
   width: 100%;
   padding: 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
 }
-.perm-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.perm-checkbox {
-  margin-right: 1rem;
-}
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-}
-.perm-actions {
-  margin-bottom: 1rem;
-}
-.perm-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1rem;
-}
-.perm-table th, .perm-table td {
-  border: 1px solid #eee;
-  padding: 0.5rem 1rem;
-  text-align: left;
-}
-.user-search {
-  margin-bottom: 1rem;
-}
-.user-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1rem;
-}
-.user-table th, .user-table td {
-  border: 1px solid #eee;
-  padding: 0.5rem 1rem;
-  text-align: left;
-}
-.assign-user-info {
-  margin-bottom: 1rem;
-}
+
+.perm-list,
 .role-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  padding: 0.5rem;
+  border-radius: 4px;
 }
+
+.perm-checkbox,
 .role-checkbox {
   margin-right: 1rem;
+  white-space: nowrap;
 }
-.assigned-roles {
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
   margin-top: 1rem;
 }
+
+.form-actions button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.form-actions button[type="submit"] {
+  background-color: #28a745;
+  color: white;
+}
+
+.form-actions button[type="button"] {
+  background-color: #6c757d;
+  color: white;
+}
+
+.user-search {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.user-search input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.user-search button {
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.assign-user-info {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.assigned-roles {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.assigned-roles h4 {
+  margin-bottom: 0.5rem;
+}
+
 .assigned-roles .perm-tag {
   margin-right: 0.5rem;
   background: #e9ecef;
@@ -658,6 +1081,7 @@ watch([userPage], () => {
   display: inline-flex;
   align-items: center;
 }
+
 .assigned-roles button {
   margin-left: 4px;
   background: #dc3545;
@@ -666,5 +1090,118 @@ watch([userPage], () => {
   border-radius: 8px;
   padding: 0 6px;
   cursor: pointer;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.pagination button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.pagination button:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
+}
+
+.pagination span {
+  color: #666;
+}
+
+.check-form {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.check-form button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.check-form button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+.check-result {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.check-result h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.result-item {
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.result-item.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.result-item.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.result-item strong {
+  margin-right: 0.5rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+  }
+  
+  .tabs {
+    flex-direction: column;
+  }
+  
+  .tabs button {
+    border-radius: 4px;
+  }
+  
+  .modal-container {
+    margin: 1rem;
+    min-width: auto;
+  }
+  
+  .role-table,
+  .perm-table,
+  .user-table {
+    font-size: 0.9rem;
+  }
+  
+  .role-table th, .role-table td,
+  .perm-table th, .perm-table td,
+  .user-table th, .user-table td {
+    padding: 0.25rem 0.5rem;
+  }
 }
 </style> 
