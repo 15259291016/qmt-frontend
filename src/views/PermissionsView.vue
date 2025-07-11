@@ -701,7 +701,7 @@ async function fetchUsers(pageNum = 1) {
     const params: any = { page: userPage.value, limit: userLimit.value }
     if (userSearch.value) params.search = userSearch.value
     const res = await userAPI.list(params)
-    if (res.data && res.data.code === 200 && res.data.data && res.data.data.users) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.users) {
       users.value = res.data.data.users
       userTotal.value = res.data.data.pagination?.total || res.data.data.users.length
       userTotalPages.value = res.data.data.pagination?.pages || 1
