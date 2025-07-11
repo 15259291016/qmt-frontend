@@ -43,7 +43,7 @@
       <div v-else-if="tab==='user'">
         <div class="user-card">
           <h2>用户管理</h2>
-          <div class="user-actions" v-if="isAdmin">
+          <div class="user-actions" v-if="isAdmin || isSuperAdmin">
             <button @click="openUserForm()">新增用户</button>
           </div>
           <div class="user-search">
@@ -86,9 +86,9 @@
                 <td>{{ formatDate(user.created_at) }}</td>
                 <td>{{ formatDate(user.last_login) }}</td>
                 <td>
-                  <button v-if="isAdmin" @click="editUser(user)">编辑</button>
-                  <button v-if="isAdmin" @click="selectUser(user)">分配角色</button>
-                  <button v-if="isAdmin && user.username !== authStore.user?.username" @click="deleteUser(user)" style="background-color: #dc3545;">删除</button>
+                  <button v-if="isAdmin || isSuperAdmin" @click="editUser(user)">编辑</button>
+                  <button v-if="isAdmin || isSuperAdmin" @click="selectUser(user)">分配角色</button>
+                  <button v-if="(isAdmin || isSuperAdmin) && user.username !== authStore.user?.username" @click="deleteUser(user)" style="background-color: #dc3545;">删除</button>
                 </td>
               </tr>
             </tbody>
@@ -140,7 +140,7 @@
       <div v-else-if="tab==='role'">
         <div class="roles-card">
           <h2>角色管理</h2>
-          <div class="role-actions" v-if="isAdmin">
+          <div class="role-actions" v-if="isAdmin || isSuperAdmin">
             <button @click="openRoleForm()">新增角色</button>
           </div>
           <table class="role-table">
@@ -164,8 +164,8 @@
                 </td>
                 <td>{{ role.is_system ? '是' : '否' }}</td>
                 <td>
-                  <button v-if="isAdmin" @click="openRoleForm(role)">编辑</button>
-                  <button v-if="isAdmin && !role.is_system" @click="deleteRole(role)">删除</button>
+                  <button v-if="isAdmin || isSuperAdmin" @click="openRoleForm(role)">编辑</button>
+                  <button v-if="(isAdmin || isSuperAdmin) && !role.is_system" @click="deleteRole(role)">删除</button>
                 </td>
               </tr>
             </tbody>
@@ -211,7 +211,7 @@
       <div v-else-if="tab==='perm'">
         <div class="permissions-card">
           <h2>权限管理</h2>
-          <div class="perm-actions" v-if="isAdmin">
+          <div class="perm-actions" v-if="isAdmin || isSuperAdmin">
             <button @click="openPermForm()">新增权限</button>
           </div>
           <table class="perm-table">
@@ -231,7 +231,7 @@
                 <td>{{ perm.action }}</td>
                 <td>{{ perm.description }}</td>
                 <td>
-                  <button v-if="isAdmin" @click="deletePerm(perm)">删除</button>
+                  <button v-if="isAdmin || isSuperAdmin" @click="deletePerm(perm)">删除</button>
                 </td>
               </tr>
             </tbody>
@@ -381,11 +381,24 @@
                 {{ role.name }}
               </span>
             </div>
+            <div v-else class="result-item">
+              <strong>用户角色：</strong>
+              <span class="no-data">无角色</span>
+            </div>
             <div v-if="checkResult.permissions && checkResult.permissions.length > 0" class="result-item">
               <strong>用户权限：</strong>
               <span v-for="perm in checkResult.permissions" :key="perm.id" class="perm-tag">
                 {{ perm.name }}
               </span>
+            </div>
+            <div v-else class="result-item">
+              <strong>用户权限：</strong>
+              <span class="no-data">无权限</span>
+            </div>
+            <!-- 调试信息 -->
+            <div class="debug-info" style="margin-top: 1rem; padding: 0.5rem; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem;">
+              <strong>调试信息：</strong>
+              <pre>{{ JSON.stringify(checkResult, null, 2) }}</pre>
             </div>
           </div>
         </div>
@@ -476,8 +489,8 @@ const authStore = useAuthStore()
 const tab = ref<'my'|'user'|'role'|'perm'|'assign'|'check'|'super-admin'>('my')
 
 // 管理员权限检查
-const isAdmin = computed(() => authStore.hasRole && authStore.hasRole('admin'))
-const isSuperAdmin = computed(() => authStore.user?.is_super_admin)
+const isAdmin = computed(() => !!(authStore.hasRole && authStore.hasRole('admin')))
+const isSuperAdmin = computed(() => !!authStore.user?.is_super_admin)
 
 // 角色管理相关
 const roles = ref<any[]>([])
@@ -564,10 +577,18 @@ function closeRoleForm() {
 async function fetchRoles() {
   try {
     const res = await roleAPI.list({ page: page.value, limit: limit.value })
-    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.roles) {
-      roles.value = res.data.data.roles
-      total.value = res.data.data.pagination.total
-      totalPages.value = res.data.data.pagination.pages
+    console.log('角色API响应:', res)
+    if (res.data && (res.data.code === 0 || res.data.code === 200)) {
+      // 后端返回的是嵌套结构：res.data.data.roles
+      if (res.data.data && res.data.data.roles) {
+        roles.value = res.data.data.roles
+        total.value = res.data.data.pagination.total
+        totalPages.value = res.data.data.pagination.pages
+      } else {
+        console.error('角色数据格式不正确:', res.data)
+      }
+    } else {
+      console.error('角色API返回错误:', res.data)
     }
   } catch (error) {
     console.error('获取角色列表失败:', error)
@@ -577,8 +598,16 @@ async function fetchRoles() {
 async function fetchAllPermissions() {
   try {
     const res = await permissionAPI.list({ page: 1, limit: 1000 })
-    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.permissions) {
-      allPermissions.value = res.data.data.permissions
+    console.log('所有权限API响应:', res)
+    if (res.data && (res.data.code === 0 || res.data.code === 200)) {
+      // 后端返回的是嵌套结构：res.data.data.permissions
+      if (res.data.data && res.data.data.permissions) {
+        allPermissions.value = res.data.data.permissions
+      } else {
+        console.error('权限数据格式不正确:', res.data)
+      }
+    } else {
+      console.error('权限API返回错误:', res.data)
     }
   } catch (error) {
     console.error('获取权限列表失败:', error)
@@ -633,10 +662,18 @@ function closePermForm() {
 async function fetchPermissions() {
   try {
     const res = await permissionAPI.list({ page: permPage.value, limit: permLimit.value })
-    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.permissions) {
-      permissions.value = res.data.data.permissions
-      permTotal.value = res.data.data.pagination.total
-      permTotalPages.value = res.data.data.pagination.pages
+    console.log('权限API响应:', res)
+    if (res.data && (res.data.code === 0 || res.data.code === 200)) {
+      // 后端返回的是嵌套结构：res.data.data.permissions
+      if (res.data.data && res.data.data.permissions) {
+        permissions.value = res.data.data.permissions
+        permTotal.value = res.data.data.pagination.total
+        permTotalPages.value = res.data.data.pagination.pages
+      } else {
+        console.error('权限数据格式不正确:', res.data)
+      }
+    } else {
+      console.error('权限API返回错误:', res.data)
     }
   } catch (error) {
     console.error('获取权限列表失败:', error)
@@ -697,7 +734,6 @@ function closeUserForm() {
 
 async function fetchUsers(pageNum = 1) {
   try {
-    debugger
     userPage.value = pageNum
     const params: any = { page: userPage.value, limit: userLimit.value }
     if (userSearch.value) params.search = userSearch.value
@@ -829,10 +865,19 @@ async function loadUserPermissions() {
       userAPI.getUserPermissions(checkUserId.value)
     ])
     
+    console.log('角色响应:', rolesRes)
+    console.log('权限响应:', permissionsRes)
+    
+    // 兼容不同的数据结构
+    const roles = rolesRes.data?.data?.roles || rolesRes.data?.roles || []
+    const permissions = permissionsRes.data?.data?.permissions || permissionsRes.data?.permissions || []
+    
     checkResult.value = {
-      roles: rolesRes.data?.data?.roles || [],
-      permissions: permissionsRes.data?.data?.permissions || []
+      roles,
+      permissions
     }
+    
+    console.log('解析后的权限数据:', checkResult.value)
   } catch (error) {
     console.error('获取用户权限信息失败:', error)
     checkResult.value = null
@@ -922,6 +967,10 @@ watch(tab, (newTab) => {
   }
   if (newTab === 'check') {
     fetchAllPermissions()
+    // 清空之前的检查结果
+    checkResult.value = null
+    checkUserId.value = ''
+    checkPermissionId.value = ''
   }
   if (newTab === 'super-admin') {
     refreshSuperAdmins()
@@ -957,6 +1006,10 @@ watch([permPage], () => {
 watch([userPage], () => {
   if (tab.value === 'user' || tab.value === 'assign') fetchUsers(userPage.value)
 })
+
+watch(() => authStore.user, (val) => {
+  console.log('authStore.user变更:', val)
+}, { immediate: true, deep: true })
 </script>
 
 <style scoped>
@@ -1327,6 +1380,36 @@ watch([userPage], () => {
 
 .result-item strong {
   margin-right: 0.5rem;
+}
+
+.perm-tag {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  margin: 0.125rem;
+  background-color: #007bff;
+  color: white;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.no-data {
+  color: #6c757d;
+  font-style: italic;
+}
+
+.debug-info {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border: 1px solid #dee2e6;
+}
+
+.debug-info pre {
+  margin: 0.5rem 0 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* 用户角色显示样式 */

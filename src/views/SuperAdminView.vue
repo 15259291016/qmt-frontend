@@ -130,7 +130,7 @@ const refreshSuperAdmins = async () => {
   try {
     loading.value = true
     const response = await superAdminAPI.list()
-    if (response.data.code === 200) {
+    if (response.data.code === 0 || response.data.code === 200) {
       superAdmins.value = response.data.data.super_admins
     }
   } catch (error) {
@@ -144,7 +144,7 @@ const refreshSuperAdmins = async () => {
 const loadAvailableUsers = async () => {
   try {
     const response = await userAPI.list({ limit: 100 })
-    if (response.data.code === 200) {
+    if (response.data.code === 0 || response.data.code === 200) {
       // 过滤掉已经是超级管理员的用户
       availableUsers.value = response.data.data.users.filter(
         (user: User) => !user.is_super_admin
@@ -162,7 +162,7 @@ const setSuperAdmin = async () => {
     settingSuperAdmin.value = true
     const response = await superAdminAPI.setSuperAdmin({ user_id: selectedUserId.value })
     
-    if (response.data.code === 200) {
+    if (response.data.code === 0 || response.data.code === 200) {
       alert('设置超级管理员成功')
       selectedUserId.value = ''
       await refreshSuperAdmins()
@@ -186,7 +186,7 @@ const removeSuperAdmin = async (admin: SuperAdminUser) => {
   try {
     const response = await superAdminAPI.removeSuperAdmin(admin.id)
     
-    if (response.data.code === 200) {
+    if (response.data.code === 0 || response.data.code === 200) {
       alert('取消超级管理员权限成功')
       await refreshSuperAdmins()
       await loadAvailableUsers()

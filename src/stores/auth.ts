@@ -1,5 +1,4 @@
 import { authAPI } from '@/api/auth'
-import { permissionAPI } from '@/api/permission'
 import { userAPI } from '@/api/user'
 import type { LoginRequest, Permission, RegisterRequest, Role, SubscribeRequest, User } from '@/config/api'
 import { API_CONFIG } from '@/config/api'
@@ -33,7 +32,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await authAPI.login(credentials)
       // 修正：兼容后端返回格式
-      const { access_token, refresh_token, user: userData } = response.data.data
+      const data = response.data?.data || response.data
+      const { access_token, refresh_token, user: userData } = data
       // 保存token到localStorage
       localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, access_token)
       localStorage.setItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY, refresh_token)
@@ -80,8 +80,9 @@ export const useAuthStore = defineStore('auth', () => {
   const getProfile = async () => {
     try {
       const response = await authAPI.getProfile()
-      user.value = response.data.data
-      return response.data.data
+      const data = response.data?.data || response.data
+      user.value = data
+      return data
     } catch (error: any) {
       // 如果是401错误，说明token无效，自动登出
       if (error.response?.status === 401 || error.message?.includes('令牌无效')) {
@@ -95,40 +96,35 @@ export const useAuthStore = defineStore('auth', () => {
 
   const getUserPermissions = async (userId: string) => {
     try {
-      const response = await permissionAPI.getUserPermissions(userId)
-      permissions.value = response.data
-      return response.data
+      const response = await userAPI.getUserPermissions(userId)
+      // 修正：兼容后端返回格式
+      permissions.value = response.data?.data?.permissions || response.data?.permissions || []
+      return permissions.value
     } catch (error) {
       console.warn('获取用户权限失败:', error)
       // 权限获取失败不影响登录流程
+      permissions.value = []
       return []
     }
   }
 
   const getUserRoles = async (userId: string) => {
     try {
-      const response = await permissionAPI.getUserRoles(userId)
-      roles.value = response.data
-      return response.data
+      const response = await userAPI.getUserRoles(userId)
+      // 修正：兼容后端返回格式
+      roles.value = response.data?.data?.roles || response.data?.roles || []
+      return roles.value
     } catch (error) {
       console.warn('获取用户角色失败:', error)
       // 角色获取失败不影响登录流程
+      roles.value = []
       return []
     }
   }
 
+  // 订阅功能暂未实现
   const subscribe = async (data: SubscribeRequest) => {
-    try {
-      const response = await userAPI.subscribe(data)
-      subscription.value = response.data
-      // 更新用户信息中的订阅到期时间
-      if (user.value) {
-        user.value.subscription_expire_at = response.data.expire_at
-      }
-      return response.data
-    } catch (error) {
-      throw error
-    }
+    throw new Error('订阅功能未实现')
   }
 
   const refreshToken = async () => {
@@ -152,21 +148,17 @@ export const useAuthStore = defineStore('auth', () => {
     if (!token) {
       throw new Error('未找到登录令牌')
     }
-
     try {
       // 先获取用户基本信息
       await getProfile()
-      
       // 如果获取用户信息成功，再获取权限和角色（可选）
       const currentUser = user.value
       if (currentUser?.id) {
-        // 并行获取权限和角色，不阻塞登录流程
-        Promise.all([
+        // 并行获取权限和角色，等待完成
+        await Promise.all([
           getUserPermissions(currentUser.id),
           getUserRoles(currentUser.id)
-        ]).catch(error => {
-          console.warn('获取用户权限或角色失败:', error)
-        })
+        ])
       }
     } catch (error: any) {
       console.error('初始化用户信息失败:', error)
