@@ -8,6 +8,8 @@ interface UserData {
   full_name?: string
   password?: string
   status?: string
+  is_admin?: boolean
+  is_super_admin?: boolean
 }
 
 interface RoleAssignment {
@@ -79,5 +81,15 @@ export const userAPI = {
   // 获取用户统计信息
   getStats() {
     return http.get(`${API_ENDPOINTS.BUSINESS.USERS}/stats`)
+  },
+  
+  // 设置用户为管理员
+  setAdmin(userId: string, isAdmin: boolean) {
+    return http.put(`${API_ENDPOINTS.BUSINESS.USERS}/${userId}`, { is_admin: isAdmin })
+  },
+  
+  // 设置用户为超级管理员（仅超级管理员可用）
+  setSuperAdmin(userId: string, isSuperAdmin: boolean) {
+    return http.put(`${API_ENDPOINTS.BUSINESS.USERS}/${userId}`, { is_super_admin: isSuperAdmin })
   }
 } 

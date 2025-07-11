@@ -47,6 +47,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/super-admin',
+      name: 'SuperAdmin',
+      component: () => import('@/views/SuperAdminView.vue'),
+      meta: { requiresAuth: true, requiresSuperAdmin: true }
+    },
+    {
       path: '/403',
       name: 'Forbidden',
       component: () => import('@/views/ForbiddenView.vue'),
@@ -96,6 +102,12 @@ router.beforeEach(async (to, from, next) => {
     
     // 检查管理员权限
     if (to.meta.requiresAdmin && !authStore.hasRole('admin')) {
+      next('/403')
+      return
+    }
+    
+    // 检查超级管理员权限
+    if (to.meta.requiresSuperAdmin && !authStore.user?.is_super_admin) {
       next('/403')
       return
     }

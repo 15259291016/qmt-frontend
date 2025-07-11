@@ -12,6 +12,7 @@
         <button :class="{active: tab==='perm'}" @click="tab='perm'">权限管理</button>
         <button :class="{active: tab==='assign'}" @click="tab='assign'">用户角色分配</button>
         <button :class="{active: tab==='check'}" @click="tab='check'">权限检查</button>
+        <button v-if="isSuperAdmin" :class="{active: tab==='super-admin'}" @click="tab='super-admin'">超级管理员</button>
       </div>
       
       <!-- 我的权限Tab -->
@@ -55,6 +56,7 @@
                 <th>用户名</th>
                 <th>邮箱</th>
                 <th>全名</th>
+                <th>角色</th>
                 <th>状态</th>
                 <th>注册时间</th>
                 <th>最后登录</th>
@@ -66,7 +68,21 @@
                 <td>{{ user.username }}</td>
                 <td>{{ user.email }}</td>
                 <td>{{ user.full_name || '-' }}</td>
-                <td>{{ user.status || 'active' }}</td>
+                <td>
+                  <div class="user-roles">
+                    <span v-for="role in user.roles" :key="role.id" class="role-tag">
+                      {{ role.name }}
+                    </span>
+                    <span v-if="!user.roles || user.roles.length === 0" class="no-role">
+                      无角色
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <span :class="user.is_active ? 'status-active' : 'status-inactive'">
+                    {{ user.is_active ? '激活' : '未激活' }}
+                  </span>
+                </td>
                 <td>{{ formatDate(user.created_at) }}</td>
                 <td>{{ formatDate(user.last_login) }}</td>
                 <td>
@@ -374,6 +390,76 @@
           </div>
         </div>
       </div>
+      
+      <!-- 超级管理员Tab -->
+      <div v-else-if="tab==='super-admin'">
+        <div class="super-admin-card">
+          <h2>超级管理员管理</h2>
+          <div class="actions">
+            <button @click="refreshSuperAdmins" class="btn btn-primary">刷新列表</button>
+          </div>
+          
+          <div v-if="superAdminLoading" class="loading">
+            加载中...
+          </div>
+          
+          <div v-else-if="superAdmins.length === 0" class="empty-state">
+            <p>暂无超级管理员</p>
+          </div>
+          
+          <div v-else class="super-admin-list">
+            <div v-for="admin in superAdmins" :key="admin.id" class="admin-item">
+              <div class="admin-info">
+                <h3>{{ admin.username }}</h3>
+                <p><strong>邮箱:</strong> {{ admin.email }}</p>
+                <p><strong>全名:</strong> {{ admin.full_name || '未设置' }}</p>
+                <p><strong>状态:</strong> 
+                  <span :class="['status', admin.is_active ? 'active' : 'inactive']">
+                    {{ admin.is_active ? '激活' : '未激活' }}
+                  </span>
+                </p>
+                <p><strong>创建时间:</strong> {{ formatDate(admin.created_at) }}</p>
+                <p><strong>最后登录:</strong> {{ formatDate(admin.last_login) }}</p>
+              </div>
+              
+              <div class="admin-actions">
+                <button 
+                  v-if="admin.id !== authStore.user?.id" 
+                  @click="removeSuperAdmin(admin)" 
+                  class="btn btn-danger"
+                >
+                  取消超级管理员权限
+                </button>
+                <span v-else class="self-note">当前用户</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 设置超级管理员 -->
+        <div class="set-super-admin-card">
+          <h2>设置超级管理员</h2>
+          <div class="form-group">
+            <label>选择用户:</label>
+            <select v-model="selectedSuperAdminUserId" class="form-control">
+              <option value="">请选择用户</option>
+              <option v-for="user in availableSuperAdminUsers" :key="user.id" :value="user.id">
+                {{ user.username }} ({{ user.email }})
+              </option>
+            </select>
+          </div>
+          
+          <div class="form-actions">
+            <button 
+              @click="setSuperAdmin" 
+              :disabled="!selectedSuperAdminUserId || settingSuperAdmin"
+              class="btn btn-primary"
+            >
+              {{ settingSuperAdmin ? '设置中...' : '设置为超级管理员' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -381,15 +467,17 @@
 <script setup lang="ts">
 import { permissionAPI } from '@/api/permission'
 import { roleAPI } from '@/api/role'
+import { superAdminAPI } from '@/api/super-admin'
 import { userAPI } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
 import { computed, onMounted, ref, watch } from 'vue'
 
 const authStore = useAuthStore()
-const tab = ref<'my'|'user'|'role'|'perm'|'assign'|'check'>('my')
+const tab = ref<'my'|'user'|'role'|'perm'|'assign'|'check'|'super-admin'>('my')
 
 // 管理员权限检查
 const isAdmin = computed(() => authStore.hasRole && authStore.hasRole('admin'))
+const isSuperAdmin = computed(() => authStore.user?.is_super_admin)
 
 // 角色管理相关
 const roles = ref<any[]>([])
@@ -433,6 +521,13 @@ const userRoles = ref<any[]>([])
 const checkUserId = ref('')
 const checkPermissionId = ref('')
 const checkResult = ref<any|null>(null)
+
+// 超级管理员相关
+const superAdmins = ref<any[]>([])
+const availableSuperAdminUsers = ref<any[]>([])
+const selectedSuperAdminUserId = ref('')
+const superAdminLoading = ref(false)
+const settingSuperAdmin = ref(false)
 
 // 格式化日期
 const formatDate = (dateString?: string) => {
@@ -606,10 +701,10 @@ async function fetchUsers(pageNum = 1) {
     const params: any = { page: userPage.value, limit: userLimit.value }
     if (userSearch.value) params.search = userSearch.value
     const res = await userAPI.list(params)
-    if (res.data && Array.isArray(res.data.data)) {
-      users.value = res.data.data
-      userTotal.value = res.data.data.length
-      userTotalPages.value = 1
+    if (res.data && res.data.code === 200 && res.data.data && res.data.data.users) {
+      users.value = res.data.data.users
+      userTotal.value = res.data.data.pagination?.total || res.data.data.users.length
+      userTotalPages.value = res.data.data.pagination?.pages || 1
     }
   } catch (error) {
     console.error('获取用户列表失败:', error)
@@ -762,6 +857,58 @@ async function checkUserPermission() {
   }
 }
 
+// 超级管理员功能
+async function refreshSuperAdmins() {
+  superAdminLoading.value = true
+  try {
+    const res = await superAdminAPI.list()
+    if (res.data && res.data.code === 200 && res.data.data && res.data.data.super_admins) {
+      superAdmins.value = res.data.data.super_admins
+    }
+  } catch (error) {
+    console.error('获取超级管理员列表失败:', error)
+  } finally {
+    superAdminLoading.value = false
+  }
+}
+
+async function removeSuperAdmin(admin: any) {
+  if (confirm(`确定要取消用户 "${admin.username}" 的超级管理员权限吗？`)) {
+    try {
+      await superAdminAPI.removeSuperAdmin(admin.id)
+      await refreshSuperAdmins()
+      alert('超级管理员权限已取消')
+    } catch (error: any) {
+      alert('取消超级管理员权限失败：' + (error.message || '未知错误'))
+    }
+  }
+}
+
+async function setSuperAdmin() {
+  if (!selectedSuperAdminUserId.value) return
+  settingSuperAdmin.value = true
+  try {
+    await superAdminAPI.setSuperAdmin({ user_id: selectedSuperAdminUserId.value })
+    await refreshSuperAdmins()
+    alert('超级管理员设置成功')
+  } catch (error: any) {
+    alert('设置超级管理员失败：' + (error.message || '未知错误'))
+  } finally {
+    settingSuperAdmin.value = false
+  }
+}
+
+async function fetchAvailableSuperAdminUsers() {
+  try {
+    const res = await userAPI.list({ limit: 1000, search: '!is_super_admin' }) // 查找不是超级管理员的用户
+    if (res.data && Array.isArray(res.data.data)) {
+      availableSuperAdminUsers.value = res.data.data
+    }
+  } catch (error) {
+    console.error('获取可用超级管理员用户失败:', error)
+  }
+}
+
 // 监听Tab切换，加载对应数据
 watch(tab, (newTab) => {
   if (newTab === 'role') {
@@ -775,6 +922,10 @@ watch(tab, (newTab) => {
   if (newTab === 'check') {
     fetchAllPermissions()
   }
+  if (newTab === 'super-admin') {
+    refreshSuperAdmins()
+    fetchAvailableSuperAdminUsers()
+  }
 })
 
 onMounted(() => {
@@ -786,6 +937,10 @@ onMounted(() => {
     fetchPermissions()
   } else if (tab.value === 'user' || tab.value === 'assign') {
     fetchUsers()
+  }
+  if (tab.value === 'super-admin') {
+    refreshSuperAdmins()
+    fetchAvailableSuperAdminUsers()
   }
 })
 
@@ -1171,6 +1326,40 @@ watch([userPage], () => {
 
 .result-item strong {
   margin-right: 0.5rem;
+}
+
+/* 用户角色显示样式 */
+.user-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.role-tag {
+  background-color: #007bff;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.no-role {
+  color: #6c757d;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+/* 用户状态显示样式 */
+.status-active {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.status-inactive {
+  color: #dc3545;
+  font-weight: 500;
 }
 
 /* 响应式设计 */

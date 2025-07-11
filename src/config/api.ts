@@ -39,6 +39,13 @@ export const API_ENDPOINTS = {
     USER_PERMISSIONS: (userId: string) => `/api/users/${userId}/permissions`
   },
   
+  // 超级管理员相关
+  SUPER_ADMIN: {
+    LIST: '/api/super-admin',
+    SET: '/api/super-admin',
+    REMOVE: (userId: string) => `/api/super-admin/${userId}`
+  },
+  
   // 业务相关
   BUSINESS: {
     DATA: '/api/data',
@@ -85,9 +92,14 @@ export interface User {
   id: string
   username: string
   email: string
+  full_name?: string
+  is_active?: boolean
+  is_admin?: boolean
+  is_super_admin?: boolean
   subscription_expire_at?: string
   created_at?: string
   updated_at?: string
+  last_login?: string
 }
 
 // 角色类型
@@ -130,4 +142,22 @@ export interface RegisterRequest {
 // 订阅请求类型
 export interface SubscribeRequest {
   months: number
+}
+
+// 超级管理员相关类型
+export interface SuperAdminUser {
+  id: string
+  username: string
+  email: string
+  full_name?: string
+  is_active: boolean
+  is_admin: boolean
+  is_super_admin: boolean
+  created_at: string
+  last_login?: string
+}
+
+// 超级管理员操作请求类型
+export interface SetSuperAdminRequest {
+  user_id: string
 } 

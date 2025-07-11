@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -34,6 +34,7 @@ const handleLogout = async () => {
         <router-link to="/profile" class="nav-link">个人中心</router-link>
         <router-link to="/permissions" class="nav-link">权限管理</router-link>
         <router-link v-if="authStore.hasRole('admin')" to="/admin" class="nav-link">管理员</router-link>
+        <router-link v-if="authStore.user?.is_super_admin" to="/super-admin" class="nav-link">超级管理员</router-link>
         <button @click="handleLogout" class="logout-btn">退出登录</button>
       </nav>
     </header>
