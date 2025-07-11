@@ -35,9 +35,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { reactive } from 'vue'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -50,17 +50,17 @@ const form = reactive({
 const handleLogin = async () => {
   try {
     // 登录
-    await authStore.login(form)
-    
-    // 登录成功后初始化用户信息
-    await authStore.initUser()
-    
-    // 跳转到首页
-    router.push('/')
+    const res = await authStore.login(form)
+    // 只在登录成功时跳转
+    if (res.data && (res.data.code === 0 || res.data.code === 200)) {
+      await authStore.initUser()
+      router.push('/')
+    } else {
+      throw new Error(res.data?.msg || '用户名或密码错误')
+    }
   } catch (error: any) {
     // 更友好的错误提示
     let errorMessage = '登录失败'
-    
     if (error.message) {
       if (error.message.includes('用户名或密码错误')) {
         errorMessage = '用户名或密码错误，请检查后重试'
@@ -72,7 +72,6 @@ const handleLogin = async () => {
         errorMessage = error.message
       }
     }
-    
     alert(errorMessage)
   }
 }
