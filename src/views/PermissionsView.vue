@@ -773,7 +773,7 @@ function closeAssignModal() {
 async function fetchUserRoles(userId: string) {
   try {
     const res = await userAPI.getUserRoles(userId)
-    if (res.data && res.data.data && res.data.data.roles) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.roles) {
       userRoles.value = res.data.data.roles
       assignRoles.value = userRoles.value.map((r: any) => r.id)
     }
@@ -863,7 +863,7 @@ async function refreshSuperAdmins() {
   superAdminLoading.value = true
   try {
     const res = await superAdminAPI.list()
-    if (res.data && res.data.code === 200 && res.data.data && res.data.data.super_admins) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.super_admins) {
       superAdmins.value = res.data.data.super_admins
     }
   } catch (error) {
@@ -902,8 +902,8 @@ async function setSuperAdmin() {
 async function fetchAvailableSuperAdminUsers() {
   try {
     const res = await userAPI.list({ limit: 1000, search: '!is_super_admin' }) // 查找不是超级管理员的用户
-    if (res.data && Array.isArray(res.data.data)) {
-      availableSuperAdminUsers.value = res.data.data
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.users) {
+      availableSuperAdminUsers.value = res.data.data.users
     }
   } catch (error) {
     console.error('获取可用超级管理员用户失败:', error)
