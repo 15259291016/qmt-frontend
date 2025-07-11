@@ -564,7 +564,7 @@ function closeRoleForm() {
 async function fetchRoles() {
   try {
     const res = await roleAPI.list({ page: page.value, limit: limit.value })
-    if (res.data && res.data.data && res.data.data.roles) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.roles) {
       roles.value = res.data.data.roles
       total.value = res.data.data.pagination.total
       totalPages.value = res.data.data.pagination.pages
@@ -577,7 +577,7 @@ async function fetchRoles() {
 async function fetchAllPermissions() {
   try {
     const res = await permissionAPI.list({ page: 1, limit: 1000 })
-    if (res.data && res.data.data && res.data.data.permissions) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.permissions) {
       allPermissions.value = res.data.data.permissions
     }
   } catch (error) {
@@ -633,7 +633,7 @@ function closePermForm() {
 async function fetchPermissions() {
   try {
     const res = await permissionAPI.list({ page: permPage.value, limit: permLimit.value })
-    if (res.data && res.data.data && res.data.data.permissions) {
+    if (res.data && (res.data.code === 0 || res.data.code === 200) && res.data.data && res.data.data.permissions) {
       permissions.value = res.data.data.permissions
       permTotal.value = res.data.data.pagination.total
       permTotalPages.value = res.data.data.pagination.pages
@@ -697,6 +697,7 @@ function closeUserForm() {
 
 async function fetchUsers(pageNum = 1) {
   try {
+    debugger
     userPage.value = pageNum
     const params: any = { page: userPage.value, limit: userLimit.value }
     if (userSearch.value) params.search = userSearch.value
